@@ -20,6 +20,8 @@ app.listen(3000, () => {
   console.log('Example app listening on port 3000!');
 });
 
+db.createTables();
+
 app.get('/', (req, res) => {
   res.send("Hello");
 })

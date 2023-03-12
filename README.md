@@ -6,20 +6,12 @@
 3. Clone dự án về máy tính 
 
 4. Mở file `.env ` trong đó sẽ thêm đoạn code sau :
-    ```nodejs 
+    ```
     DB_USER=
     DB_PASSWORD=
     DB_HOST=
     DB_PORT=
     DB_DATABASE=
-    ```
-    Sau đó điền thông tin vào các biến, ví dụ :  
-    ```
-    DB_USER=postgres  
-    DB_PASSWORD=15112002  
-    DB_HOST=localhost  
-    DB_PORT=5432  
-    DB_DATABASE=FirstWeb  
     ```
 5. Chạy các câu lệnh sau :   
 

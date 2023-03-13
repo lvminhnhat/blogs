@@ -1,5 +1,8 @@
-const { Pool } = require('pg');
 const { ApolloServer, gql } = require('apollo-server');
+const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
 require('dotenv').config();
 
 const pool = new Pool({
@@ -14,8 +17,6 @@ pool.connect((err) => {
     if (err) throw err;
     console.log('Connected to PostgreSQL server');
 });
-
-
 
 const typeDefs = gql`
   type User {
@@ -49,36 +50,19 @@ const typeDefs = gql`
     user(id: ID!): User
     users : [User]
     course(id: ID!): Course
-    login(username : String!, password : String!) : User!
   }
 
   type Mutation {
-    createUser(full_name: String!, email: String!, password: String!, username: String!): User!
+    signUp(full_name: String!, email: String!, password: String!, username: String!): String!
+    signIn(username : String!, password : String!) : String!
     createSuggestion(user_id: ID!, course_id: ID!): Suggestion!
     createTag(title: String!): Tag!
     createCourse(user_id: ID!, title: String!, description: String!): Course!
   }
 `;
+
 const resolvers = {
     Query: {
-        login: async (_, { username, password }) => {
-            try {
-                const query = `SELECT * FROM users WHERE username = $1`;
-                const { rows } = await pool.query(query, [username]);
-                if (rows.length === 0) {
-                    throw new Error('Invalid username or password');
-                }
-                const user = rows[0];
-                if (user.password !== password) {
-                    throw new Error('Invalid username or password');
-                }
-                return user;
-            } catch (error) {
-                console.error('Error logging in', error);
-                throw new Error('Could not log in');
-            }
-        },
-
         user: async (_, { id }) => {
             const query = 'SELECT * FROM users WHERE user_id = $1';
             const values = [id];
@@ -126,8 +110,11 @@ const resolvers = {
          },
      },*/
     Mutation: {
-        async createUser(_, { full_name, email, password, username }) {
+        signUp : async (_, { full_name, email, password, username }) =>  {
+            email = email.trim().toLowerCase();
+            const hashed = await bcrypt.hash(password, 10);
             try {
+                
                 const checkUsernameQuery = `SELECT * FROM users WHERE username = $1`;
                 const usernameExists = await pool.query(checkUsernameQuery, [username]);
                 if (usernameExists.rows.length > 0) {
@@ -138,21 +125,41 @@ const resolvers = {
                 if (emailExists.rows.length > 0) {
                     throw new Error('Email already exists');
                 }
+
                 const query = `
                 INSERT INTO users (full_name, email, username,password)
                 VALUES ($1, $2, $3, $4)
                 RETURNING *
                 `;
-                const values = [full_name, email, username, password];
+                const values = [full_name, email, username, hashed];
                 const { rows } = await pool.query(query, values);
                 console.log('User created:', rows[0]);
-                return rows[0];
+                return jwt.sign({ id: rows[0].user_id }, process.env.JWT_SECRET);
             } catch (error) {
                 console.error('Error creating user', error);
                 throw new Error('Could not create user');
             }
         },
-        async createSuggestion(_, { user_id, course_id }) {
+        signIn: async (_, { username, password }) => {
+            try {
+                const query = `SELECT * FROM users WHERE username = $1`;
+                const { rows } = await pool.query(query, [username]);
+                if (rows.length === 0) {
+                    throw new Error('Invalid username or password');
+                }
+                const user = rows[0];
+                const valid = await bcrypt.compare(password, user.password);
+
+                if (!valid) {
+                    throw new Error('Invalid username or password');
+                }
+                return jwt.sign({ id: user.user_id }, process.env.JWT_SECRET);
+            } catch (error) {
+                console.error('Error logging in', error);
+                throw new Error('Could not log in');
+            }
+        },
+        createSuggestion: async (_, { user_id, course_id }) =>  {
             try {
                 const query = `
               INSERT INTO suggestions (user_id, course_id)
@@ -168,7 +175,7 @@ const resolvers = {
                 throw new Error('Could not create suggestion');
             }
         },
-        async createTag(_, { title }) {
+        createTag: async (_, { title }) =>  {
             try {
                 const query = `
                 INSERT INTO tags (title) 
@@ -184,7 +191,7 @@ const resolvers = {
                 throw new Error('Could not create tag');
             }
         },
-        async createCourse(_, { user_id, title, description }) {
+        createCourse: async (_, { user_id, title, description }) =>  {
             try {
                 const query = `
                 INSERT INTO courses (user_id, title, description) 
@@ -203,6 +210,7 @@ const resolvers = {
 
     }
 }
+
 module.exports = {
     resolvers,
     typeDefs,
